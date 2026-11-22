@@ -1,0 +1,70 @@
+name: Ricerca approfondita (motore pubblico)
+on:
+  workflow_dispatch:
+    inputs:
+      domanda:
+        description: "La domanda della ricerca"
+        required: true
+        type: string
+      origine:
+        description: "telegram = il PDF arriva su Telegram; sito = il risultato va solo sul sito"
+        required: false
+        default: "telegram"
+        type: string
+      id:
+        description: "Codice della ricerca (lo mette il sito, lascia vuoto)"
+        required: false
+        default: ""
+        type: string
+jobs:
+  ricerca:
+    if: ${{ inputs.origine == 'sito' || vars.TELEGRAM_ATTIVO == 'si' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Scarica il codice dal repository privato
+        uses: actions/checkout@v4
+        with:
+          repository: matbo9/agente-finanza
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: codice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests yfinance pandas matplotlib reportlab trafilatura googlenewsdecoder lxml
+      - run: python ricerca.py
+        working-directory: codice
+        env:
+          DOMANDA: ${{ inputs.domanda }}
+          ORIGINE: ${{ inputs.origine }}
+          ID_RICERCA: ${{ inputs.id }}
+          CARTELLA_USCITA: uscita
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          TELEGRAM_TOKEN: ${{ inputs.origine != 'sito' && secrets.TELEGRAM_TOKEN_ANALISTA || '' }}
+          TELEGRAM_CHAT_ID: ${{ inputs.origine != 'sito' && secrets.TELEGRAM_CHAT_ID || '' }}
+          MAPPA_URL: ${{ inputs.origine == 'sito' && secrets.MAPPA_URL || '' }}
+          MAPPA_CHIAVE: ${{ inputs.origine == 'sito' && secrets.MAPPA_CHIAVE || '' }}
+      - name: Copia del PDF (riserva)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ricerca
+          path: codice/uscita/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Avviso se fallisce
+        if: ${{ failure() && inputs.origine != 'sito' }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN_ANALISTA }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=La ricerca approfondita è fallita, controlla Actions"
+  bloccato:
+    if: ${{ !(inputs.origine == 'sito' || vars.TELEGRAM_ATTIVO == 'si') }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Telegram disattivato (variabile TELEGRAM_ATTIVO diversa da si) e richiesta non dal sito."
