@@ -1,0 +1,39 @@
+name: Segnali in formazione (ogni ora)
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: segnali-live
+  cancel-in-progress: true
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Scarica il codice dal repository privato
+        uses: actions/checkout@v4
+        with:
+          repository: matbo9/agente-finanza
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: codice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ricorda i segnali gia' avvisati oggi
+        uses: actions/cache@v4
+        with:
+          path: codice/live_visti.json
+          key: live-visti-${{ github.run_id }}
+          restore-keys: live-visti-
+      - run: pip install requests yfinance pandas numpy matplotlib reportlab trafilatura googlenewsdecoder lxml pypdf
+      - run: python segnali_trading.py
+        working-directory: codice
+        env:
+          MODO_LIVE: "1"
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN_SEGNALI }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAPPA_URL: ${{ secrets.MAPPA_URL }}
+          MAPPA_CHIAVE: ${{ secrets.MAPPA_CHIAVE }}
+# FINE FILE segnali-live.yml
