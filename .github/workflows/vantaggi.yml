@@ -1,0 +1,29 @@
+name: Vantaggi statistici (ogni notte)
+on:
+  schedule:
+    - cron: "23 4 * * 2-6"
+  workflow_dispatch:
+concurrency:
+  group: vantaggi
+  cancel-in-progress: true
+jobs:
+  vantaggi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Scarica il codice dal repository privato
+        uses: actions/checkout@v4
+        with:
+          repository: matbo9/agente-finanza
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: codice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests yfinance pandas numpy
+      - run: python vantaggi.py
+        working-directory: codice
+        env:
+          MAPPA_URL: ${{ secrets.MAPPA_URL }}
+          MAPPA_CHIAVE: ${{ secrets.MAPPA_CHIAVE }}
+# FINE FILE vantaggi.yml
